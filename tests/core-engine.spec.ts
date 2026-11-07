@@ -25,9 +25,10 @@ function harness(policyOverrides: Partial<Policy> = {}, { emit, prepareTicket }:
   const executor: Executor = {
     start: vi.fn((ticket, assignment) => { launches.push([ticket, assignment]) }), deliver: vi.fn(ticket => { deliveries.add(ticket.id) }), stop: vi.fn(),
   }
-  let version = 'v1', paused = false
+  let version = 'v1', paused = false, routing: 'worker' | 'orchestrator' = 'worker'
   const policy: Policy = {
     get version() { return version }, get paused() { return paused }, evalTimeoutMs: 60_000,
+    get followupRouting() { return routing },
     gate: (t, thread) => !t.human ? { admissible: false, reason: 'not human' } : t.actor.id === 'alice' ? { admissible: true, strength: 'explicit', basis: { via: 'listed' } } : thread.subscriptions.length ? { admissible: true, strength: 'inferred', basis: { via: 'followup' } } : { admissible: false, reason: 'not a member' },
     revalidate: () => version !== 'revoked',
     admitsInferred: rules => rules.length > 0,
@@ -62,7 +63,7 @@ function harness(policyOverrides: Partial<Policy> = {}, { emit, prepareTicket }:
     input.kind === 'trigger' && input.readAt === null ? [input.id] : []))
   const decide = (candidate: Candidate, outcome: Outcome) => engine.decide(candidate.triggers[0]!.id, { ...outcome, evalId: candidate.evalId })
   return { repo, engine, outbox, withdrawn, requests, assessor, executor, delivered, settle, pump, read, decide,
-    setVersion: (value: string) => { version = value }, setPaused: (value: boolean) => { paused = value }, tick: (seconds: number) => { clock += seconds } }
+    setVersion: (value: string) => { version = value }, setRouting: (value: 'worker' | 'orchestrator') => { routing = value }, setPaused: (value: boolean) => { paused = value }, tick: (seconds: number) => { clock += seconds } }
 }
 function accepted(h: ReturnType<typeof harness>, id = '1', thread = 't1') {
   h.engine.receive(trigger(id, { threads: [{ source: 'chat', id: thread }] })); h.pump()
@@ -1467,6 +1468,59 @@ describe('follow-up review: delivery times', () => {
     h.tick(1); h.engine.inputsDelivered(ticketId, assignmentId, [inputId!])
     h.tick(1); h.engine.stopTicket(ticketId, 'not needed')
     expect(h.repo.threads.get('chat:t1')!.pending).toEqual(['2'])
+  })
+})
+describe('orchestrator follow-up routing', () => {
+  it('assesses a person\'s message on a ticket\'s thread first, and leaves it to the main Session to accept, attach or ignore', () => {
+    const h = harness()
+    const ticketId = accepted(h).ticketId!
+    h.setRouting('orchestrator')
+    h.engine.receive(trigger('2')); h.pump()
+    // The message reached no ticket: it waits for Eval, and the ticket's worker never sees it.
+    expect(h.repo.triggers.disposition('2')).toMatchObject({ fanout: [] })
+    expect(h.repo.tickets.get(ticketId)!.inputs).toEqual([])
+    expect(h.requests.at(-1)!.triggers.map(item => item.id)).toEqual(['2'])
+    // The main Session attaches it to the ticket, which receives it as its own message and takes it out of the Eval.
+    expect(h.engine.attach(ticketId, '2', 'The same fix')).toMatchObject({ inputs: [expect.objectContaining({ triggerId: '2', note: 'The same fix' })] })
+    h.settle()
+    expect(h.delivered.map(([, input]) => input)).toEqual([key('input', ticketId, 'trigger', '2')])
+    expect(h.repo.triggers.disposition('2')).toMatchObject({ fanout: [ticketId] })
+  })
+  it('sends a message the main Session ignores, or accepts as new work, to no ticket of the thread', () => {
+    const h = harness()
+    const ticketId = accepted(h).ticketId!
+    h.setRouting('orchestrator')
+    h.engine.receive(trigger('2')); h.pump()
+    h.decide(h.requests.at(-1)!, { kind: 'ignore', reason: 'chat' })
+    expect(h.repo.tickets.get(ticketId)!.inputs).toEqual([])
+    // Accepted as new work, it opens its own ticket instead of joining the one on the thread.
+    h.engine.receive(trigger('3')); h.pump()
+    const created = h.decide(h.requests.at(-1)!, { kind: 'accept', title: 'Other', scope: 'small', reason: 'requested' })
+    h.settle()
+    expect(created.ticketId).not.toBe(ticketId)
+    expect(h.repo.tickets.get(ticketId)!.inputs).toEqual([])
+    expect(h.repo.tickets.get(created.ticketId!)!.origin).toMatchObject({ triggerId: '3' })
+  })
+  it('keeps delivering a message on a thread a ticket follows only for context, and resumes no ended ticket before the main Session decides', () => {
+    const h = harness()
+    const ticketId = accepted(h).ticketId!
+    h.engine.followForContext(ticketId, { source: 'chat', id: 'issue' })
+    h.setRouting('orchestrator')
+    h.engine.receive(trigger('2', { threads: [{ source: 'chat', id: 'issue' }] })); h.pump()
+    expect(h.repo.tickets.get(ticketId)!.inputs.at(-1)).toMatchObject({ triggerId: '2', context: true })
+    expect(h.repo.triggers.disposition('2')).toMatchObject({ fanout: [ticketId], context: [ticketId] })
+    // An ended ticket waits for the main Session instead of resuming on the message itself.
+    h.engine.report(ticketId, { state: 'ready', summary: 'done' })
+    h.engine.receive(trigger('3'))
+    expect(h.repo.tickets.get(ticketId)!.ended).toBeDefined()
+    expect(h.repo.threads.get('chat:t1')!.pending).toEqual(['3'])
+  })
+  it('still hands a bot\'s message to the subscribing ticket, which no person wrote', () => {
+    const h = harness()
+    const ticketId = accepted(h).ticketId!
+    h.setRouting('orchestrator')
+    h.engine.receive(trigger('2', { human: false }))
+    expect(h.repo.tickets.get(ticketId)!.inputs.at(-1)).toMatchObject({ triggerId: '2' })
   })
 })
 describe('routing review', () => {

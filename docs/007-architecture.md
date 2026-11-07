@@ -53,7 +53,7 @@ Each part extends `EnginePart` (`src/core/part.ts`), which provides options and 
 
 | Part | Responsibility | Depends on |
 | --- | --- | --- |
-| `Intake` | A Source's Trigger: stored once with its disposition, recorded on its Threads and their correlations, fanned out to the subscribed Tickets and, unless it is a person's message that reached one, queued for Eval on its primary Thread | Tickets |
+| `Intake` | A Source's Trigger: stored once with its disposition, recorded on its Threads and their correlations, fanned out to the subscribed Tickets and, unless it is a person's message that reached one, queued for Eval on its primary Thread; under `orchestrator` follow-up routing a person's message reaches no Ticket of its Thread except one that follows it for context | Tickets |
 | `Evals` | The Evals of Threads: batching, the gate's strength, actor and basis with the Trigger that gave them (`primary`), the deadline from the candidate's delivery and its shift by a pause, the requeue of an expired Eval, candidates, replays and hand-backs, the requeue on a Policy change, and the Decision each ends with: accept, stop, ignore or unavailable | Tickets |
 | `Tickets` | The Ticket lifecycle: creation from an accept with its Mandate, Subscriptions and first Assignment, the Threads it follows and their closes (`followsDone`), attached Threads and Threads followed for context, Inputs and notes, resume and the messages a resume refuses, retry, restart, stop and end, the Subscriptions it drops, and the notice of a Policy change to the Tickets it bears on | Replies |
 | `Assignments` | What the Executor and its workers report: an Assignment started, Inputs reached it or failed to, a restart interrupted it, and a worker's Report with its question for a person | Tickets, Replies |
@@ -96,7 +96,7 @@ Callers receive only their role's `Pick` of the Engine: `EngineForSources`, `Eng
 The Engine keeps batching, authorization, fan-out, resume and attention lifecycle rules private. Several shared predicates make these rules consistent:
 
 - `waitsForPerson` (`src/core/model.ts`): the latest Assignment reported `blocked` or `failed`, and no human message has arrived since. Automatic Inputs and failed launches remain held while this is true.
-- `followupOwners`: the Tickets still responsible for a human follow-up received on their own Threads. A Ticket can be live or ended without a human stop and waiting to resume. Handing back the message ends that ownership.
+- `followupOwners`: the Tickets still responsible for a human follow-up received on their own Threads. A Ticket can be live or ended without a human stop and waiting to resume. Handing back the message ends that ownership. It returns no Ticket while the Policy's `followups` is `orchestrator`, which leaves every person's message to the main Session.
 - `settled`: a Decision resolved the request; stop, unavailable, routed and refused-stop Decisions do not count.
 - `ticketStage` (`src/core/stage.ts`): implements the stage table in [003 Execution](003-execution.md).
 
@@ -302,7 +302,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/core/ports.ts` | The ports: `Repositories`, `Policy`, `SourceScope`, `Assessor`, `Executor`, `Outbox`, and the domain events |
 | `src/core/engine.ts` | The Engine, the core's entry point, and the role interfaces `EngineForSources`, `EngineForMainSession`, `EngineForPeople`, `EngineForSettings` and `EngineForExecutor` |
 | `src/core/part.ts` | `EnginePart`, the base of the Engine's parts, and `EngineOptions` |
-| `src/core/intake.ts` | `Intake`: Triggers from Sources, to their Tickets and, unless a person's message reached one, to Eval |
+| `src/core/intake.ts` | `Intake`: Triggers from Sources, to their Tickets and, unless a person's message reached one, to Eval; a Policy that routes follow-ups to the main Session sends a person's message to Eval first |
 | `src/core/evals.ts` | `Evals`: the Evals of Threads and their Decisions |
 | `src/core/tickets.ts` | `Tickets`: the Ticket lifecycle, the Threads a Ticket follows, Subscriptions and Inputs |
 | `src/core/assignments.ts` | `Assignments`: the Executor's facts and its workers' Reports |

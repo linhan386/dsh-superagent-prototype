@@ -79,6 +79,7 @@ export type SourcePolicy = z.infer<typeof SourcePolicySchema>
 export const PolicyConfigSchema = z.object({
   rules: z.array(RuleSchema).refine(rules => new Set(rules.map(rule => rule.id)).size === rules.length, 'Duplicate rule IDs').default(DEFAULT_RULES),
   sources: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), SourcePolicySchema).default({}),
+  followups: z.enum(['worker', 'orchestrator']).default('worker'),
 }).strict()
 export const EvalConfigSchema = z.object({
   mode: z.enum(['off', 'observe', 'auto']).default('observe'),
@@ -108,13 +109,14 @@ export type SettingsBlock = 'policy' | 'eval' | 'executor' | `source:${string}`
 export type SettingsSave = SettingsBlock | 'pause'
 export type SettingsOrigin = 'panel' | 'tool' | 'sync'
 
-export const POLICY_REVISION = 'mandate-v3'
+export const POLICY_REVISION = 'mandate-v4'
 /**
  * Compute a version hash for settings that affect work authorization.
  * Changes to models, concurrency, pause state, or polling intervals do not invalidate existing decisions.
  */
 export function policyVersion(settings: Settings): string {
-  return key(POLICY_REVISION, JSON.stringify({ rules: settings.policy.rules, mode: settings.eval.mode, sources: settings.policy.sources }))
+  return key(POLICY_REVISION, JSON.stringify({ rules: settings.policy.rules, mode: settings.eval.mode, sources: settings.policy.sources,
+    followups: settings.policy.followups }))
 }
 export function allowedSender(settings: Settings, actor: ActorRef): z.infer<typeof AllowedSchema> | undefined {
   return settings.policy.sources[actor.source]?.allowed.find(entry => sameName(entry.id, actor.id))
@@ -187,7 +189,7 @@ export function settingsPolicy(settings: Settings, sources: SourceScope): Policy
     return { admissible: true, strength: 'inferred', basis: { ...recorded, via: 'admission', cell, observation: { mode } } }
   }
   return {
-    version, paused: settings.paused, evalTimeoutMs: settings.eval.timeoutSeconds * 1000,
+    version, paused: settings.paused, evalTimeoutMs: settings.eval.timeoutSeconds * 1000, followupRouting: settings.policy.followups,
     gate(trigger: Trigger, thread, tickets) {
       if (!trigger.human) return machineGate(trigger)
       const allowed = allowedSender(settings, trigger.actor)

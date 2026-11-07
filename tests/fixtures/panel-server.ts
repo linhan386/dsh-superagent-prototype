@@ -235,6 +235,7 @@ function initial(): PanelServer {
   const settings = SettingsSchema.parse({
     policy: { sources: { feishu: { allowed: [{ id: 'ou_alice', name: 'Alice' }], syncChat: 'oc_team' },
       github: { allowed: [{ id: 'alice' }] } },
+      followups: 'worker',
       rules: [{ id: 'copy', name: '文案修改', enabled: true, instruction: '修正明确的文案错误' }] },
     sources: { feishu: { enabled: true, config: { cli: 'lark-bot', chats: [{ chatId: 'oc_team', listen: 'mentions' }],
       directMessages: true } },

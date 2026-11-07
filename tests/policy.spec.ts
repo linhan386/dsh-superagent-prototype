@@ -221,8 +221,9 @@ describe('revalidate and version', () => {
     expect(setup({ ...base, policy: { ...base.policy, rules: base.policy.rules.map(rule => ({ ...rule, enabled: rule.id !== 'copy' })) } }).policy.revalidate(inferred)).toBe(false)
     expect(setup(nobody).policy.revalidate({ ...mandate, basis: { via: 'followup' } })).toBe(true)
   })
-  it('changes the Policy version for rules, accept mode and the Sources\' parts, not for pause, concurrency, models or Source configuration', () => {
+  it('changes the Policy version for rules, accept mode, follow-up routing and the Sources\' parts, not for pause, concurrency, models or Source configuration', () => {
     const version = setup().version
+    expect(setup({ ...base, policy: { ...base.policy, followups: 'orchestrator' } }).version).not.toBe(version)
     expect(setup({ ...base, paused: true, executor: { ...base.executor, maxWorkers: 9 }, eval: { ...base.eval, timeoutSeconds: 300 }, sources: { ...base.sources, github: { enabled: true, config: { pollSeconds: 600 } } } }).version).toBe(version)
     expect(setup({ ...base, sources: { feishu: feishuSource({ chats: [], directMessages: false }) } }).version).toBe(version)
     expect(setup({ ...base, eval: { ...base.eval, mode: 'off' } }).version).not.toBe(version)
@@ -238,7 +239,7 @@ describe('settings migration', () => {
       sources: { feishu: { enabled: true, config: { chats: [], directMessages: true }, authority: { chats: [] } } },
     }))
     expect(saved.policy).toEqual({
-      rules: [{ id: 'visual', name: 'V', enabled: true, instruction: 'x' }],
+      rules: [{ id: 'visual', name: 'V', enabled: true, instruction: 'x' }], followups: 'worker',
       sources: { feishu: { allowed: [{ id: MEMBER, name: 'Alice' }, { id: 'ou_bob', name: 'Bob' }], syncChat: CHAT, admission: {} }, github: { allowed: [{ id: 'alice' }, { id: 'carol' }], admission: {} } },
     })
     expect(saved).toMatchObject({ paused: false, executor: { model: null, maxWorkers: 2, directory: '', prepare: '', blockedCommands: [] } })
@@ -252,7 +253,7 @@ describe('settings migration', () => {
     expect(migrated).toEqual({
       paused: true,
       sources: { feishu: feishuSource({ chats: [{ chatId: CHAT, listen: 'mentions' }, { chatId: OBSERVED, listen: 'all' }], directMessages: false }), github: { enabled: true, config: { pollSeconds: 120 } } },
-      policy: { rules: [], sources: { feishu: { allowed: [{ id: MEMBER, name: 'A' }], admission: {} }, github: { allowed: [{ id: 'a' }], admission: {} } } },
+      policy: { rules: [], followups: 'worker', sources: { feishu: { allowed: [{ id: MEMBER, name: 'A' }], admission: {} }, github: { allowed: [{ id: 'a' }], admission: {} } } },
       eval: { mode: 'auto', timeoutSeconds: 90, model: { provider: 'p', model: 'm' } },
       executor: { model: null, maxWorkers: 5, directory: '', prepare: '', blockedCommands: [] },
     })

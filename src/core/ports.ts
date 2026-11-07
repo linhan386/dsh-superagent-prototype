@@ -6,6 +6,11 @@ import type { Reason } from './reasons.ts'
 /** Gate admission result: either inadmissible with a reason code, or admissible with strength and MandateBasis. */
 export type GateResult = { admissible: false; reason: string } | { admissible: true; strength: Strength; basis: MandateBasis }
 
+/**
+ * Who decides a person's message on a Thread that has Tickets: the Ticket's worker (`worker`), which hands back what is not
+ * its own, or the main Session (`orchestrator`), which assesses every such message before any Ticket receives it.
+ */
+export type FollowupRouting = 'worker' | 'orchestrator'
 /** Whether a Source receives a Trigger; `observed` when it also receives messages not addressed to the agent, and `row` the receiving scope the Policy's admission table names, such as a chat. */
 export type ScopeResult = { listened: true; observed: boolean; row?: string } | { listened: false; reason: string }
 /** Source configuration as the domain sees it: listening scope per trigger or per recorded Mandate basis. */
@@ -24,6 +29,12 @@ export interface Policy {
   admitsInferred(rules: readonly string[]): boolean
   /** How long an assessor may take before an eval is recorded as unavailable. */
   evalTimeoutMs: number
+  /**
+   * Who decides a person's message on a Thread with Tickets: `worker` sends it to the ticket as its worker's follow-up, and
+   * `orchestrator` assesses it first, so that the main Session decides whether it is new work, belongs to a ticket it then
+   * attaches it to, or needs nothing.
+   */
+  followupRouting: FollowupRouting
 }
 
 /** What the assessor receives: bounded facts, never authority. */
