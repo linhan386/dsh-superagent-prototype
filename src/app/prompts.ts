@@ -43,6 +43,11 @@ export const defaultPrompts = (): PromptConfig => ({ ...teamDefaults, skills: {}
 
 const ENVIRONMENT_HEADING = 'Execution environment (from this installation\'s settings; it takes precedence over any repository or account named elsewhere in these instructions; an empty value means that part is not configured here). The prepare command of a ticket directory reads the same variables:'
 const POLICY_HEAD = '## Policy\nPolicy version {version}; accept mode {mode}. The accept mode and the rules decide proactive candidates only: an explicit request is routed as dispatch says, in any mode and whatever the rules.'
+/** What the main Session must do when the Policy routes a person's message on a thread with tickets to it, appended to the Policy section. */
+const FOLLOWUP_ROUTING: Record<'worker' | 'orchestrator', string> = {
+  worker: '',
+  orchestrator: `\nA person's message on a subscribed thread is assessed here first, before any ticket of it receives it: decide whether it is new work (accept), belongs to an existing ticket (attach), or needs nothing (ignore). Nothing reaches a ticket until you attach the message there, and a ticket that follows the thread for context reads it as background only. A message that resumes an ended ticket therefore waits for your attach.`,
+}
 type Role = 'orchestrator' | 'worker'
 /** A built-in part a team may override: the roles that read it, its text, and the placeholders a template's override keeps. */
 interface BuiltInPart { roles: readonly Role[]; text: string; placeholders?: readonly string[] }
@@ -93,7 +98,9 @@ export function policySection(settings: Settings, config: PromptConfig = default
   const line = (text: string) => text.replace(/\s*\n\s*/g, ' ')
   const rules = settings.policy.rules.filter(rule => rule.enabled).map(({ id, name, instruction }) => `- ${line(name)} (${id}): ${line(instruction)}`)
   const part = rules.length ? 'runtime/policy' : 'runtime/policy/none'
-  return { key: part, text: fill(builtIn(config, part), { version: policyVersion(settings), mode: settings.eval.mode, rules: rules.join('\n') }) }
+  const text = fill(builtIn(config, part), { version: policyVersion(settings), mode: settings.eval.mode, rules: rules.join('\n') })
+  // The routing of a person's message on a thread with tickets is a policy setting, so it follows the rules and no teammate text.
+  return { key: part, text: text + FOLLOWUP_ROUTING[settings.policy.followups] }
 }
 /**
  * Assemble a role's system prompt sections in order from fixed templates, team sections, the generated execution environment

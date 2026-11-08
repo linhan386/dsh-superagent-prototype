@@ -10,6 +10,11 @@ const THREAD = `feishu:${CHAT}:om_1`
 const followup = (id: string, text: string, overrides: Record<string, unknown> = {}) => feishu(id, text, { mentions: [], root_id: 'om_1',
   ...overrides })
 const notices = (host: Host) => host.relays(host.runtime.masterId).filter(item => item.kind === 'follow_up')
+/** Switch the deployment's Policy to let the main Session decide a person's message before any ticket receives it. */
+const routeHere = (host: Host) => {
+  const settings = host.runtime.store.settings()
+  host.runtime.store.saveSettings({ ...settings, policy: { ...settings.policy, followups: 'orchestrator' } })
+}
 
 it('delivers a follow-up to the worker and tells the main Session with a card, without an Eval', async () => {
   h = await startRuntime()
@@ -18,7 +23,7 @@ it('delivers a follow-up to the worker and tells the main Session with a card, w
   const message = followup('2', '顺便把标题也改了', { parent_id: 'om_1' })
   h.runtime.receive(message)
   await h.runtime.idle()
-  expect(h.relays(sessionId)).toEqual([expect.objectContaining({ trigger_id: message.id, text: '顺便把标题也改了' })])
+  expect(h.relays(sessionId)).toEqual([expect.objectContaining({ trigger_id: message.id, text: expect.stringContaining('顺便把标题也改了') })])
   expect(notices(h)).toEqual([{ kind: 'follow_up', trigger_id: message.id, from: 'ou_alice', thread: THREAD, at: message.at,
     text: '顺便把标题也改了',
     replies_to: { trigger_id: ticket.origin.triggerId, preview: '@bot 修一下回归' },
@@ -300,4 +305,49 @@ it('tells a worker it may hand back a message beyond its ticket or for another o
   const { sessionId } = await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
   expect((h.tools.get(sessionId)!.get('orchestrator_trigger_handback') as unknown as { description: string }).description)
     .toContain('beyond this ticket or for another one')
+})
+
+it('assesses a person\'s message on a ticket\'s thread first when the Policy routes follow-ups to the main Session', async () => {
+  h = await startRuntime()
+  const { ticket, sessionId } = await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
+  routeHere(h)
+  h.deliveries.mockClear()
+  const message = followup('2', '@bot 顺便把标题也改了', { mentions: [{ id: 'ou_bot' }] })
+  h.runtime.receive(message); await h.runtime.idle()
+  // Nobody has it yet: the main Session receives a candidate, no follow_up notice, and the worker nothing.
+  expect(h.candidates()).toEqual([message.id])
+  expect(notices(h)).toEqual([])
+  expect(h.relays(sessionId)).toEqual([])
+  expect(h.runtime.store.tickets.get(ticket.id)!.inputs).toEqual([])
+  // Attaching it there gives the message to that ticket's worker, and the candidate is over.
+  expect(await h.route({ kind: 'attach', ticket_id: ticket.id, trigger_id: message.id })).toMatchObject({ ticket: expect.objectContaining({ ticket_id: ticket.id }) })
+  await h.runtime.idle()
+  expect(h.relays(sessionId)).toEqual([expect.objectContaining({ trigger_id: message.id, text: expect.stringContaining('顺便把标题也改了') })])
+  expect(h.runtime.store.triggers.disposition(message.id)).toMatchObject({ fanout: [ticket.id] })
+})
+
+it('opens new work from a person\'s message on another ticket\'s thread when the Policy routes follow-ups to the main Session', async () => {
+  h = await startRuntime()
+  const { ticket } = await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
+  routeHere(h)
+  const message = followup('2', '@bot 另外把导出按钮也加上', { mentions: [{ id: 'ou_bot' }] })
+  h.runtime.receive(message); await h.runtime.idle()
+  const accepted = await h.route({ kind: 'accept', trigger_id: message.id, title: '导出按钮', worktree_name: 'export',
+    acknowledgement: '收到，加导出按钮。' })
+  await h.runtime.idle()
+  expect((accepted.ticket as { ticket_id: string }).ticket_id).not.toBe(ticket.id)
+  expect(h.runtime.store.tickets.get(ticket.id)!.inputs).toEqual([])
+})
+
+it('keeps a message the main Session ignores away from the tickets of its thread when the Policy routes follow-ups there', async () => {
+  h = await startRuntime()
+  const { ticket, sessionId } = await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
+  routeHere(h)
+  h.deliveries.mockClear()
+  const message = followup('2', '谢谢')
+  h.runtime.receive(message); await h.runtime.idle()
+  expect(await h.route({ kind: 'ignore', trigger_id: message.id, reason: 'Thanks only' })).toMatchObject({ decision: 'ignore' })
+  await h.runtime.idle()
+  expect(h.relays(sessionId)).toEqual([])
+  expect(h.runtime.store.tickets.get(ticket.id)!.inputs).toEqual([])
 })

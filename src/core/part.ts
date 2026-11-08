@@ -27,7 +27,7 @@ export abstract class EnginePart {
   protected now(): string { return this.options.now?.() ?? new Date().toISOString() }
   protected policy(): Policy { return this.options.policy() }
   /** The tickets whose worker decides a person's follow-up: see `followupOwners`. */
-  protected owners(trigger: Trigger): string[] { return followupOwners(trigger, this.repo) }
+  protected owners(trigger: Trigger): string[] { return followupOwners(trigger, this.repo, this.policy().followupRouting) }
   /** Refuse a main-Session routing of a follow-up a ticket's worker still decides. */
   protected leftToWorkers(trigger: Trigger): void {
     const owners = this.owners(trigger)

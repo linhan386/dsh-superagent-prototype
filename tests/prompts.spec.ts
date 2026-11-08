@@ -154,6 +154,11 @@ describe('overrides of built-in parts', () => {
       const policy = policySection(settings(), edited)
       expect(policy).toEqual({ key: 'runtime/policy', text: `## Policy\nRules of ${policyVersion(settings())} in ${settings().eval.mode} mode:\n`
         + settings().policy.rules.filter(rule => rule.enabled).map(rule => `- ${rule.name} (${rule.id}): ${rule.instruction}`).join('\n') })
+      // A Policy that routes follow-ups itself says so after its rules, and a team's template does not carry that fact.
+      const routed = SettingsSchema.parse({ policy: { ...settings().policy, followups: 'orchestrator' } })
+      const own = policySection(routed, edited).text
+      expect(own).toContain(`Rules of ${policyVersion(routed)} in ${routed.eval.mode} mode:`)
+      expect(own).toContain('is assessed here first')
       const none = SettingsSchema.parse({ policy: { rules: [] } })
       expect(policySection(none, edited)).toEqual({ key: 'runtime/policy/none', text: `## Policy\n${policyVersion(none)}, ${none.eval.mode}: nothing to accept.` })
       // A rule's text that names a placeholder is not filled again.

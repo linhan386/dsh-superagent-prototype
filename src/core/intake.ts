@@ -11,6 +11,8 @@ export type ReceiveResult = 'stored' | 'duplicate' | 'filtered'
  * Ingests incoming triggers from Sources, deduplicating and filtering them against SourceScope before recording thread correlations.
  * Fans listened triggers out to subscribed tickets via Tickets and queues for Eval, on its primary thread, every trigger no
  * ticket's worker decides (see `followupOwners`).
+ * Under `orchestrator` follow-up routing a person's message reaches no ticket of the Thread except one that follows it for
+ * context, and goes to Eval first: the main Session decides whether it is new work, a ticket's, or no work.
  * Engine delegates trigger reception to this part.
  */
 export class Intake extends EnginePart {
@@ -40,8 +42,11 @@ export class Intake extends EnginePart {
         // Only a person's message on a non-context thread resumes an ended ticket; bots and CI do not (the Executor re-reads
         // threads when it resumes), and a human-stopped ticket receives nothing because its Mandate was withdrawn.
         const followed = !!thread.context?.includes(ticketId)
-        const resumes = trigger.human && ticket?.ended?.by !== 'human' && !followed
-        if (!ticket || (!liveTicket(ticket) && !resumes)) continue
+        // Where the main Session decides follow-ups, a person's message waits for it instead of reaching the Thread's tickets;
+        // one that follows the Thread for context still reads it, as background that decides nothing.
+        if (!ticket || (trigger.human && !followed && this.ownedBySession())) continue
+        const resumes = trigger.human && ticket.ended?.by !== 'human' && !followed
+        if (!liveTicket(ticket) && !resumes) continue
         reached.set(ticketId, { ticket, context: followed && (reached.get(ticketId)?.context ?? true) })
       }
       this.repo.threads.save(thread)
@@ -60,4 +65,6 @@ export class Intake extends EnginePart {
     this.emit('trigger.received', { triggerId: trigger.id, threads: trigger.threads.map(threadKey) })
     return 'stored'
   }
+  /** Whether the main Session, not a ticket's worker, decides a person's message on a Thread with Tickets. */
+  private ownedBySession(): boolean { return this.policy().followupRouting === 'orchestrator' }
 }

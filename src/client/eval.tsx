@@ -161,6 +161,11 @@ function PolicyBlock() {
         <LabelValue label={t('policyVersion')} value={<span className="dt-mono">{policyVersion.slice(0, 8)}</span>} /><InfoTip
           text={t('policyVersionHint')} />
       </p>
+      <Section title={t('routing')} hint={t('routingHint')}>
+        <SegmentedControl className="dt-segmented" label={t('routing')} value={policy.followups ?? 'worker'}
+          onChange={followups => edit({ followups })} options={(['worker', 'orchestrator'] as const).map(value => ({
+            value, label: t(`routingOption.${value}`), title: t(`routingOption.${value}Hint`) }))} />
+      </Section>
       <Section title={t('rules')} hint={t('rulesHint')} action={<Button variant="ghost" size="sm" icon={<Icon name="plus" />}
         onClick={add}>{t('addRule')}</Button>}>
         {policy.rules.length ? <ul className="dt-rules">{policy.rules.map((rule, index) => <RuleRow key={rule.id} rule={rule}

@@ -1,4 +1,5 @@
 /** Domain model of a proactive agent: the concepts and their invariants, independent of any source, policy, or executor. */
+import type { FollowupRouting } from './ports.ts'
 import type { Reason } from './reasons.ts'
 
 /** Actor identity in the source's own vocabulary; Policy decides which actors may originate work on that Source. */
@@ -71,8 +72,12 @@ export interface FollowupRecords {
  * while it is ended, not by a person, with the Trigger waiting to resume it. None once a person sent it to Eval, or while
  * an Eval holds it, which an earlier version may have queued. While a ticket owns it, the message goes to no Eval, and the
  * main Session may only stop the work on it.
+ * Under `orchestrator` follow-up routing no ticket owns a person's message: it waits for Eval, and the main Session decides
+ * it as new work, attaches it to a ticket, or ignores it.
  */
-export function followupOwners(trigger: Pick<Trigger, 'id' | 'human' | 'threads'>, records: FollowupRecords): string[] {
+export function followupOwners(trigger: Pick<Trigger, 'id' | 'human' | 'threads'>, records: FollowupRecords,
+  routing: FollowupRouting = 'worker'): string[] {
+  if (routing === 'orchestrator') return []
   if (!trigger.human) return []
   const disposition = records.triggers.disposition(trigger.id)
   if (!disposition || disposition.requeued) return []

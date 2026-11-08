@@ -19,11 +19,12 @@ The Source records whether a message addresses the agent: `mention` for a mentio
 
 Every message on a subscribed Thread reaches its subscribed Tickets as context, including messages from bots and CI. This delivery bypasses the gate and grants no new authority. Each Ticket remains limited by its Mandate.
 
-A person's message on a Ticket's own Thread belongs to that Ticket's Executor to decide. The same applies when the main Session attaches a message to a Ticket. While an Executor owns the message, it takes no Eval and gets no Decision. Each Executor either handles the request within its Ticket's scope or hands it back for routing elsewhere.
+Who decides a person's message on a Thread with Tickets is the Policy's **follow-up routing** setting, which has two values:
 
-Ownership continues while the Ticket is live, even if a person removes its Subscription. It also covers an ended Ticket that was not stopped by a person and has the message waiting to resume it.
+- **Worker decides** (the default). A person's message on a Ticket's own Thread belongs to that Ticket's Executor to decide; it takes no Eval and gets no Decision. The main Session receives a follow-up notice and, while an Executor owns the message, may only stop work on the person's request: accept, attach, ignore and requeue are refused. A stop still passes through the gate with the follow-up strength described below.
+- **Main Session decides first.** Every person's message on a subscribed Thread is assessed before any Ticket of it receives it. The main Session accepts it as new work, attaches it to a Ticket, whose Executor then receives it as an Input, or ignores it. Nothing reaches a Ticket until it is attached, and no follow-up notice is sent. An ended Ticket therefore resumes only once the main Session attaches the message to it. The same applies to a message the main Session attaches to a Ticket under either setting.
 
-The main Session receives a follow-up notice. While an Executor owns the message, the main Session may only stop work on the person's request; accept, attach, ignore and requeue are refused. A stop still passes through the gate with the follow-up strength described below.
+Under worker routing, ownership continues while the Ticket is live, even if a person removes its Subscription. It also covers an ended Ticket that was not stopped by a person and has the message waiting to resume it.
 
 ### Handing back and releasing follow-ups
 
@@ -52,6 +53,8 @@ Human messages that reach no Ticket, including Threads whose Tickets were stoppe
 | not admitted | Any other bot's message, everything the admission table ignores, and every inferred case while the accept mode is `off` |
 
 For an unlisted person, an explicit admission cell takes precedence even on a Thread with Tickets and works in every accept mode. Otherwise their follow-up is inferred and is not admitted in `off` mode. Messages on Threads followed only for context use the admission table instead of follow-up strength.
+
+Under main-Session-first routing a message on a Thread with Tickets is admitted by the same table, since no Ticket owns it: an allowed sender's message keeps explicit strength through the follow-up cell of the gate, and an unlisted person's follows the admission table as any other message does.
 
 ## Admission
 

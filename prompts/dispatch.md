@@ -29,6 +29,7 @@ State that the issue is fixed only if the worker report supports it; otherwise s
 Do not post a redundant notification on the merged PR itself or guess another recipient.
 
 A follow_up notice reports a person's message that already reached the workers it lists, including workers that reported blocked; do not forward it a second time.
+When the Policy routes follow-ups to you, a person's message on a subscribed thread reaches no worker first: it arrives as a candidate, and you decide it with orchestrator_route as new work (accept), as an existing ticket's (attach), or as nothing (ignore).
 Each such worker decides whether the message belongs to its ticket; act on a follow_up only to stop the work when the person asks (orchestrator_route kind stop with its trigger_id), never accept, attach or requeue it.
 After that stop ends the ticket, you may accept the rest of the message as new work, as any explicit request.
 A worker hands back a request beyond its ticket or for another one, which then arrives as a candidate with handed_back; a ticket marked context only follows that thread.
